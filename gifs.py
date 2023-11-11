@@ -1,41 +1,45 @@
+import os
 import requests
 from bs4 import BeautifulSoup
-import os
 
-def download_gifs(url):
-    response = requests.get(url)
-    if response.status_code != 200:
-        print("Failed to retrieve the webpage.")
-        return
+def get_base_url(url):
+    from urllib.parse import urlparse
+    parsed_url = urlparse(url)
+    return f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-    soup = BeautifulSoup(response.content, 'html.parser')
-    images = soup.find_all('img')
-    gif_urls = [img['src'] for img in images if img['src'].endswith('.gif')]
-
-    print(f"Found {len(gif_urls)} GIFs. Proceed with download? (y/n)")
-    confirm = input()
-    if confirm.lower() != 'y':
-        print("Aborted.")
-        return
-
-    dir_name = "gifs"
+def create_new_directory(base_path):
     counter = 1
-    while os.path.exists(dir_name):
-        dir_name = f"gifs-{counter}"
+    new_path = base_path
+    while os.path.exists(new_path):
+        new_path = f"{base_path}-{counter}"
         counter += 1
-    os.makedirs(dir_name)
+    os.makedirs(new_path)
+    return new_path
 
-    for i, gif_url in enumerate(gif_urls):
-        try:
-            gif_data = requests.get(gif_url).content
-            file_path = os.path.join(dir_name, f"gif_{i}.gif")
-            with open(file_path, 'wb') as file:
-                file.write(gif_data)
-        except Exception as e:
-            print(f"Failed to download {gif_url}: {e}")
+def download_gifs(url, base_url, save_path):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    gifs = soup.find_all('img', {'src': lambda x: x and x.endswith('.gif')})
 
-    print(f"Download complete. GIFs saved in {dir_name}/")
+    print(f"Found {len(gifs)} GIFs. Proceed with download? (y/n)")
+    if input().lower() == 'y':
+        for gif in gifs:
+            gif_url = gif['src']
+            if not gif_url.startswith(('http://', 'https://')):
+                gif_url = f"{base_url}/{gif_url}"
 
-input_url = input("Enter the URL of the website: ")
-download_gifs(input_url)
+            try:
+                gif_data = requests.get(gif_url)
+                gif_name = gif_url.split('/')[-1]
+                with open(f"{save_path}/{gif_name}", 'wb') as file:
+                    file.write(gif_data.content)
+            except Exception as e:
+                print(f"Failed to download {gif_url}: {e}")
+
+        print(f"Download complete. GIFs saved in {save_path}/")
+
+url = input("Enter the URL of the website: ")
+base_url = get_base_url(url)
+save_path = create_new_directory("gifs")
+download_gifs(url, base_url, save_path)
 
